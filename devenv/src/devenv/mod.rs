@@ -2040,6 +2040,26 @@ impl Devenv {
         .await
     }
 
+    pub async fn processes_start_or_up(
+        &self,
+        name: &str,
+        options: ProcessOptions,
+        verbosity: VerbosityLevel,
+    ) -> Result<RunMode> {
+        if self.native_manager_pid_file().exists() || self.processes_pid().exists() {
+            self.processes_start(name).await?;
+            Ok(RunMode::Detached)
+        } else {
+            self.up(
+                vec![name.to_string()],
+                devenv_tasks::RunMode::All,
+                options,
+                verbosity,
+            )
+            .await
+        }
+    }
+
     pub async fn processes_stop(&self, name: &str) -> Result<()> {
         self.expect_ok_response(&processes::ApiRequest::Stop {
             name: name.to_string(),

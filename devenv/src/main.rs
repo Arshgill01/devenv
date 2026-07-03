@@ -949,10 +949,25 @@ async fn dispatch_command(
                 .await
             }
             ProcessesCommand::Start {
-                name: Some(name), ..
+                name: Some(name),
+                detach,
             } => {
-                devenv.processes_start(&name).await?;
-                Ok(CommandResult::Done)
+                let options = devenv::ProcessOptions {
+                    detach,
+                    log_to_file: detach,
+                    strict_ports: config_strict_ports,
+                    command_rx,
+                    daemon: detach,
+                };
+                match devenv
+                    .processes_start_or_up(&name, options, verbosity)
+                    .await?
+                {
+                    devenv::RunMode::Foreground(shell_command) => {
+                        Ok(CommandResult::Exec(shell_command.command))
+                    }
+                    devenv::RunMode::Detached => Ok(CommandResult::Done),
+                }
             }
             ProcessesCommand::Down {} | ProcessesCommand::Stop { name: None } => {
                 devenv.down().await?;
