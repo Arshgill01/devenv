@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `showOutput = true` / `--show-output` being ignored when AI-agent auto-quiet (or `--quiet`) is active. Explicit task output now streams even at Quiet, without treating stdout as an error ([#3038](https://github.com/cachix/devenv/issues/3038)).
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
