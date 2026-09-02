@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv tasks run` skipping a process that a task depends on via `@completed` when that process has `start.enable = false`. The process now runs to completion as the dependency requires; `devenv up` still does not auto-start it ([#3005](https://github.com/cachix/devenv/issues/3005)).
 - Restored dotenv compatibility with older devenv CLIs whose project inputs resolve newer modules. These CLIs now fall back to the legacy Nix parser instead of failing because the `loadDotenv` primop is unavailable.
 - Fixed `devenv shell` hanging on exit or repeatedly reloading when a configured dotenv file was missing, especially in large repositories.
 - Fixed `devenv tasks run` leaving processes running after it exits, in both TUI and non-TUI mode. A task depending on a process, such as `after = [ "devenv:processes:postgres@ready" ]`, started that process but never stopped it, so services like PostgreSQL and Redis were orphaned and kept holding their ports and data directories.
