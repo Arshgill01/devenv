@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv tasks run` restarting processes that are already running via `devenv up`. Process dependencies now attach to the existing manager, wait until those processes are healthy, and run the task without a crash loop ([#3137](https://github.com/cachix/devenv/issues/3137)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 
 ## 2.3.1 (2026-09-11)
