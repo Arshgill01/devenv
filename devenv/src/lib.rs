@@ -21,7 +21,7 @@ pub use devenv_snix_backend;
 
 pub use devenv::{
     DIRENVRC, DIRENVRC_VERSION, Devenv, DevenvOptions, ProcessOptions, RunMode,
-    SecretsNeedPrompting, ShellCommand, format_shell_exports,
+    SecretsNeedPrompting, ShellCommand, format_shell_exports, push_shell_fragment,
 };
 pub use devenv_tasks as tasks;
 

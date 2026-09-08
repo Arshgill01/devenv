@@ -1026,7 +1026,7 @@ async fn dispatch_command(
                     BTreeMap::new()
                 }
             };
-            output.push_str(&devenv::format_shell_exports(&task_exports));
+            devenv::push_shell_fragment(&mut output, &devenv::format_shell_exports(&task_exports));
             Ok(CommandResult::Print(output))
         }
         Commands::GenerateJSONSchema => {
