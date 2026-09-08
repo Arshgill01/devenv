@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+- Fixed `devenv shell` printing `bash: export: … not a valid identifier` and truncating `PATH` at the first space when a task re-exports `PATH` (for example Python venv activation) and the parent `PATH` contains a directory with a space ([#3165](https://github.com/cachix/devenv/issues/3165)).
 - Fixed treefmt intermittently failing to stat managed files during shell entry by running it after `devenv:files`.
 
 ## 2.3.1 (2026-09-11)
