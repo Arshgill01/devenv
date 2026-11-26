@@ -51,17 +51,14 @@ pub(crate) fn ensure_gc_root(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => GcRootOutcome::Created,
         Err(error) => return Err(miette!("Failed to inspect existing GC root: {}", error)),
         Ok(metadata) if !metadata.file_type().is_symlink() => GcRootOutcome::Invalid,
-        Ok(_) => {
-            let target = std::fs::read_link(gc_root)
-                .map_err(|e| miette!("Failed to read existing GC root: {}", e))?;
-            if target == Path::new(&logical_path) {
-                GcRootOutcome::Unchanged
-            } else if is_in_store(&target, &storedir) {
-                GcRootOutcome::Replaced
-            } else {
-                GcRootOutcome::Invalid
-            }
-        }
+        Ok(_) => match std::fs::read_link(gc_root) {
+            Ok(target) if target == Path::new(&logical_path) => GcRootOutcome::Unchanged,
+            Ok(target) if is_in_store(&target, &storedir) => GcRootOutcome::Replaced,
+            Ok(_) => GcRootOutcome::Invalid,
+            // Another process removed the symlink after symlink_metadata saw it.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => GcRootOutcome::Created,
+            Err(error) => return Err(miette!("Failed to read existing GC root: {}", error)),
+        },
     };
 
     // Nix atomically replaces symlinks into the store; remove only entries it refuses.
@@ -117,8 +114,82 @@ fn logical_store_path_str(storedir: &str, path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
-    use super::{is_in_store, logical_store_path_str};
+    use nix_bindings_store::store::Store;
+
+    use super::{GcRootOutcome, ensure_gc_root, is_in_store, logical_store_path_str};
+
+    #[test]
+    fn ensure_gc_root_on_a_real_store_treats_a_vanished_symlink_as_create() {
+        crate::gc_boehm::init();
+        crate::gc_boehm::register_current_thread().expect("register gc thread");
+
+        let mut store = Store::open(None, []).expect("open nix store");
+        let storedir = store.get_storedir().expect("store dir");
+        let store_path = first_store_object(&storedir);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let gc_root = dir.path().join("devenv-gc-root");
+
+        let created = ensure_gc_root(&mut store, &gc_root, &store_path).expect("create gc root");
+        assert_eq!(created, GcRootOutcome::Created);
+        assert_eq!(
+            std::fs::read_link(&gc_root).expect("gc root symlink"),
+            Path::new(&store_path)
+        );
+
+        let unchanged = ensure_gc_root(&mut store, &gc_root, &store_path).expect("keep gc root");
+        assert_eq!(unchanged, GcRootOutcome::Unchanged);
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let mut deleters = Vec::new();
+        for _ in 0..8 {
+            let stop_flag = Arc::clone(&stop);
+            let root = gc_root.clone();
+            deleters.push(std::thread::spawn(move || {
+                while !stop_flag.load(Ordering::Relaxed) {
+                    let _ = std::fs::remove_file(&root);
+                }
+            }));
+        }
+
+        // The window is the two syscalls inside ensure_gc_root. A build that
+        // still returned the read error failed inside a loop of this size.
+        let mut read_error = None;
+        for _ in 0..100_000 {
+            if let Err(error) = ensure_gc_root(&mut store, &gc_root, &store_path) {
+                let message = error.to_string();
+                if message.contains("Failed to read existing GC root") {
+                    read_error = Some(message);
+                    break;
+                }
+            }
+        }
+        stop.store(true, Ordering::Relaxed);
+        for deleter in deleters {
+            deleter.join().expect("deleter");
+        }
+        assert!(
+            read_error.is_none(),
+            "vanished symlink still failed the read: {read_error:?}"
+        );
+    }
+
+    fn first_store_object(storedir: &str) -> String {
+        std::fs::read_dir(storedir)
+            .expect("read store directory")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| !name.starts_with('.'))
+            })
+            .expect("nix store contains a path")
+            .to_string_lossy()
+            .into_owned()
+    }
 
     #[test]
     fn logical_store_path_str_recovers_relocated_path() {
